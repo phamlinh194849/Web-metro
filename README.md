@@ -38,8 +38,21 @@ Hệ thống quản lý Metro với giao diện web hiện đại, được xây
 - npm hoặc yarn
 
 ### Cài đặt dependencies
+
+#### Trên Windows PowerShell
+Nếu gặp lỗi "cannot be loaded because running scripts is disabled", chạy lệnh sau trước:
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+#### Cài đặt packages
 ```bash
 npm install
+```
+
+**Lưu ý:** Nếu gặp lỗi `'react-scripts' is not recognized`, chạy:
+```bash
+npm install react-scripts
 ```
 
 ### Chạy ứng dụng
