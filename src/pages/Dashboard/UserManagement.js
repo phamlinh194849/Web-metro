@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -20,6 +20,7 @@ import {
   Alert,
   Chip,
   Avatar,
+  CircularProgress,
 } from '@mui/material';
 import { Add, Edit, Delete, Person } from '@mui/icons-material';
 
@@ -28,43 +29,54 @@ const UserManagement = () => {
     name: '',
     email: '',
     phone: '',
-    role: 'user',
+    role: 2, // Default to user role
     status: 'active',
   });
   const [openDialog, setOpenDialog] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [success, setSuccess] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [fetching, setFetching] = useState(true);
 
-  // Mock data - replace with API call
-  const [users, setUsers] = useState([
-    {
-      id: 1,
-      name: 'Nguyễn Văn A',
-      email: 'nguyenvana@example.com',
-      phone: '0123456789',
-      role: 'admin',
-      status: 'active',
-      avatar: null,
-    },
-    {
-      id: 2,
-      name: 'Trần Thị B',
-      email: 'tranthib@example.com',
-      phone: '0987654321',
-      role: 'user',
-      status: 'active',
-      avatar: null,
-    },
-    {
-      id: 3,
-      name: 'Lê Văn C',
-      email: 'levanc@example.com',
-      phone: '0111222333',
-      role: 'user',
-      status: 'inactive',
-      avatar: null,
-    },
-  ]);
+  // Fetch users from API
+  const fetchUsers = async () => {
+    try {
+      setFetching(true);
+      const token = localStorage.getItem('token');
+      
+      if (!token) {
+        setError('Không tìm thấy token xác thực');
+        return;
+      }
+
+      const response = await fetch('https://gometro-backend-production.up.railway.app/admin/users', {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': token,
+        },
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setUsers(data.data);
+      } else {
+        setError(data.error || 'Lỗi khi tải danh sách người dùng');
+      }
+    } catch (err) {
+      setError('Lỗi kết nối server');
+      console.error('Error fetching users:', err);
+    } finally {
+      setFetching(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
 
   const handleChange = (e) => {
     setFormData({
@@ -73,45 +85,111 @@ const UserManagement = () => {
     });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
+    setError('');
+    setSuccess('');
     
-    if (editingUser) {
-      // Update existing user
-      setUsers(users.map(user => 
-        user.id === editingUser.id ? { ...formData, id: editingUser.id, avatar: editingUser.avatar } : user
-      ));
-      setSuccess('Cập nhật người dùng thành công!');
-    } else {
-      // Add new user
-      const newUser = {
-        ...formData,
-        id: Date.now(),
-        avatar: null,
+    try {
+      const token = localStorage.getItem('token');
+      
+      if (!token) {
+        setError('Không tìm thấy token xác thực');
+        return;
+      }
+
+      const requestData = {
+        email: formData.email,
+        full_name: formData.name,
+        phone: formData.phone,
+        role: parseInt(formData.role),
+        status: formData.status,
       };
-      setUsers([...users, newUser]);
-      setSuccess('Thêm người dùng thành công!');
+
+      let url = 'https://gometro-backend-production.up.railway.app/admin/users';
+      let method = 'POST';
+
+      if (editingUser) {
+        url += `/${editingUser.id}`;
+        method = 'PUT';
+      }
+
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': token,
+        },
+        body: JSON.stringify(requestData),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setSuccess(editingUser ? 'Cập nhật người dùng thành công!' : 'Thêm người dùng thành công!');
+        handleCloseDialog();
+        fetchUsers(); // Refresh the list
+      } else {
+        setError(data.error || 'Thao tác thất bại');
+      }
+    } catch (err) {
+      setError('Lỗi kết nối server');
+      console.error('Error submitting user:', err);
+    } finally {
+      setLoading(false);
     }
-    
-    handleCloseDialog();
-    setFormData({
-      name: '',
-      email: '',
-      phone: '',
-      role: 'user',
-      status: 'active',
-    });
   };
 
   const handleEdit = (user) => {
     setEditingUser(user);
-    setFormData(user);
+    setFormData({
+      name: user.full_name,
+      email: user.email,
+      phone: user.phone || '',
+      role: user.role.toString(),
+      status: user.status,
+    });
     setOpenDialog(true);
   };
 
-  const handleDelete = (userId) => {
-    setUsers(users.filter(user => user.id !== userId));
-    setSuccess('Xóa người dùng thành công!');
+  const handleDelete = async (userId) => {
+    if (!window.confirm('Bạn có chắc chắn muốn xóa người dùng này?')) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('token');
+      
+      if (!token) {
+        setError('Không tìm thấy token xác thực');
+        return;
+      }
+
+      const response = await fetch(`https://gometro-backend-production.up.railway.app/admin/users/${userId}`, {
+        method: 'DELETE',
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': token,
+        },
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setSuccess('Xóa người dùng thành công!');
+        fetchUsers(); // Refresh the list
+      } else {
+        setError(data.error || 'Xóa người dùng thất bại');
+      }
+    } catch (err) {
+      setError('Lỗi kết nối server');
+      console.error('Error deleting user:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCloseDialog = () => {
@@ -121,7 +199,7 @@ const UserManagement = () => {
       name: '',
       email: '',
       phone: '',
-      role: 'user',
+      role: 2,
       status: 'active',
     });
   };
@@ -131,12 +209,38 @@ const UserManagement = () => {
     setEditingUser(null);
   };
 
+  const getRoleLabel = (role) => {
+    switch (role) {
+      case 1:
+        return 'Admin';
+      case 2:
+        return 'User';
+      case 3:
+        return 'Staff';
+      default:
+        return 'Unknown';
+    }
+  };
+
   const getRoleColor = (role) => {
-    return role === 'admin' ? 'error' : 'primary';
+    switch (role) {
+      case 1:
+        return 'error';
+      case 2:
+        return 'primary';
+      case 3:
+        return 'warning';
+      default:
+        return 'default';
+    }
   };
 
   const getStatusColor = (status) => {
     return status === 'active' ? 'success' : 'default';
+  };
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('vi-VN');
   };
 
   return (
@@ -160,62 +264,76 @@ const UserManagement = () => {
         </Alert>
       )}
 
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
+          {error}
+        </Alert>
+      )}
+
       <Paper sx={{ width: '100%', overflow: 'hidden' }}>
-        <TableContainer>
-          <Table stickyHeader>
-            <TableHead>
-              <TableRow>
-                <TableCell>Avatar</TableCell>
-                <TableCell>Tên</TableCell>
-                <TableCell>Email</TableCell>
-                <TableCell>Số điện thoại</TableCell>
-                <TableCell>Vai trò</TableCell>
-                <TableCell>Trạng thái</TableCell>
-                <TableCell>Thao tác</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {users.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell>
-                    <Avatar>
-                      {user.avatar ? (
-                        <img src={user.avatar} alt={user.name} />
-                      ) : (
-                        <Person />
-                      )}
-                    </Avatar>
-                  </TableCell>
-                  <TableCell>{user.name}</TableCell>
-                  <TableCell>{user.email}</TableCell>
-                  <TableCell>{user.phone}</TableCell>
-                  <TableCell>
-                    <Chip
-                      label={user.role === 'admin' ? 'Quản trị viên' : 'Người dùng'}
-                      color={getRoleColor(user.role)}
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={user.status === 'active' ? 'Hoạt động' : 'Không hoạt động'}
-                      color={getStatusColor(user.status)}
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <IconButton onClick={() => handleEdit(user)} color="primary">
-                      <Edit />
-                    </IconButton>
-                    <IconButton onClick={() => handleDelete(user.id)} color="error">
-                      <Delete />
-                    </IconButton>
-                  </TableCell>
+        {fetching ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+            <CircularProgress />
+          </Box>
+        ) : (
+          <TableContainer>
+            <Table stickyHeader>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Avatar</TableCell>
+                  <TableCell>Tên</TableCell>
+                  <TableCell>Email</TableCell>
+                  <TableCell>Số điện thoại</TableCell>
+                  <TableCell>Vai trò</TableCell>
+                  <TableCell>Trạng thái</TableCell>
+                  <TableCell>Ngày tạo</TableCell>
+                  <TableCell>Thao tác</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+              </TableHead>
+              <TableBody>
+                {users.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell>
+                      <Avatar>
+                        {user.avatar ? (
+                          <img src={user.avatar} alt={user.full_name} />
+                        ) : (
+                          <Person />
+                        )}
+                      </Avatar>
+                    </TableCell>
+                    <TableCell>{user.full_name}</TableCell>
+                    <TableCell>{user.email}</TableCell>
+                    <TableCell>{user.phone || 'N/A'}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={getRoleLabel(user.role)}
+                        color={getRoleColor(user.role)}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={user.status === 'active' ? 'Hoạt động' : 'Không hoạt động'}
+                        color={getStatusColor(user.status)}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell>{formatDate(user.created_at)}</TableCell>
+                    <TableCell>
+                      <IconButton onClick={() => handleEdit(user)} color="primary" disabled={loading}>
+                        <Edit />
+                      </IconButton>
+                      <IconButton onClick={() => handleDelete(user.id)} color="error" disabled={loading}>
+                        <Delete />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
       </Paper>
 
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="md" fullWidth>
@@ -233,6 +351,7 @@ const UserManagement = () => {
                   value={formData.name}
                   onChange={handleChange}
                   required
+                  disabled={loading}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -244,6 +363,7 @@ const UserManagement = () => {
                   value={formData.email}
                   onChange={handleChange}
                   required
+                  disabled={loading}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -253,7 +373,7 @@ const UserManagement = () => {
                   name="phone"
                   value={formData.phone}
                   onChange={handleChange}
-                  required
+                  disabled={loading}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -265,9 +385,11 @@ const UserManagement = () => {
                   value={formData.role}
                   onChange={handleChange}
                   required
+                  disabled={loading}
                 >
-                  <option value="user">Người dùng</option>
-                  <option value="admin">Quản trị viên</option>
+                  <option value={1}>Admin</option>
+                  <option value={2}>User</option>
+                  <option value={3}>Staff</option>
                 </TextField>
               </Grid>
               <Grid item xs={12}>
@@ -279,6 +401,7 @@ const UserManagement = () => {
                   value={formData.status}
                   onChange={handleChange}
                   required
+                  disabled={loading}
                 >
                   <option value="active">Hoạt động</option>
                   <option value="inactive">Không hoạt động</option>
@@ -288,9 +411,14 @@ const UserManagement = () => {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseDialog}>Hủy</Button>
-          <Button onClick={handleSubmit} variant="contained">
-            {editingUser ? 'Cập nhật' : 'Thêm'}
+          <Button onClick={handleCloseDialog} disabled={loading}>Hủy</Button>
+          <Button 
+            onClick={handleSubmit} 
+            variant="contained" 
+            disabled={loading}
+            startIcon={loading ? <CircularProgress size={20} /> : null}
+          >
+            {loading ? 'Đang xử lý...' : (editingUser ? 'Cập nhật' : 'Thêm')}
           </Button>
         </DialogActions>
       </Dialog>
