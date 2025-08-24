@@ -53,43 +53,72 @@ const Sidebar = () => {
         '& .MuiDrawer-paper': {
           width: drawerWidth,
           boxSizing: 'border-box',
-          backgroundColor: '#f5f5f5',
-          borderRight: '1px solid #e0e0e0',
+          background: 'linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%)',
+          borderRight: '1px solid rgba(0,0,0,0.08)',
           mt: '64px', // Height of AppBar
           height: 'calc(100vh - 64px)',
+          boxShadow: '4px 0 20px rgba(0,0,0,0.08)',
         },
       }}
     >
-      <Box sx={{ overflow: 'auto' }}>
+      <Box sx={{ overflow: 'auto', py: 2 }}>
         <List>
           {menuItems.map((item, index) => (
             <React.Fragment key={item.text}>
-              <ListItem disablePadding>
+              <ListItem disablePadding sx={{ px: 1, mb: 0.5 }}>
                 <ListItemButton
                   selected={location.pathname === item.path}
                   onClick={() => handleNavigation(item.path)}
                   sx={{
+                    borderRadius: 2,
+                    mx: 1,
+                    transition: 'all 0.3s ease',
                     '&.Mui-selected': {
-                      backgroundColor: '#e3f2fd',
+                      background: 'linear-gradient(45deg, #1976d2, #42a5f5)',
+                      color: 'white',
+                      boxShadow: '0 4px 12px rgba(25, 118, 210, 0.3)',
                       '&:hover': {
-                        backgroundColor: '#e3f2fd',
+                        background: 'linear-gradient(45deg, #1565c0, #1976d2)',
+                        transform: 'translateX(4px)',
                       },
+                      '& .MuiListItemIcon-root': {
+                        color: 'white',
+                      },
+                    },
+                    '&:hover': {
+                      backgroundColor: '#e3f2fd',
+                      transform: 'translateX(4px)',
+                      boxShadow: '0 2px 8px rgba(25, 118, 210, 0.15)',
                     },
                   }}
                 >
-                  <ListItemIcon sx={{ color: location.pathname === item.path ? '#1976d2' : 'inherit' }}>
+                  <ListItemIcon sx={{ 
+                    color: location.pathname === item.path ? 'white' : '#666',
+                    minWidth: 40,
+                    transition: 'all 0.3s ease'
+                  }}>
                     {item.icon}
                   </ListItemIcon>
                   <ListItemText 
                     primary={item.text}
                     sx={{ 
-                      color: location.pathname === item.path ? '#1976d2' : 'inherit',
-                      fontWeight: location.pathname === item.path ? 'bold' : 'normal'
+                      color: location.pathname === item.path ? 'white' : '#333',
+                      fontWeight: location.pathname === item.path ? 'bold' : 500,
+                      '& .MuiTypography-root': {
+                        fontSize: '0.9rem',
+                        transition: 'all 0.3s ease'
+                      }
                     }}
                   />
                 </ListItemButton>
               </ListItem>
-              {index < menuItems.length - 1 && <Divider />}
+              {index < menuItems.length - 1 && (
+                <Divider sx={{ 
+                  mx: 2, 
+                  my: 1,
+                  opacity: 0.3
+                }} />
+              )}
             </React.Fragment>
           ))}
         </List>

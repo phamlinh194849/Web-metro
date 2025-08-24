@@ -135,30 +135,25 @@ const Login = () => {
               border: '1px solid rgba(255, 255, 255, 0.2)',
             }}
           >
-            {/* Metro Logo/Icon */}
+            {/* Metro Logo */}
             <Box
               sx={{
-                width: 80,
-                height: 80,
-                borderRadius: '50%',
-                background: 'linear-gradient(45deg, #1976d2, #42a5f5)',
+                mb: 3,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                mb: 3,
-                boxShadow: '0 8px 32px rgba(25, 118, 210, 0.3)',
               }}
             >
-              <Typography
-                variant="h3"
-                sx={{
-                  color: 'white',
-                  fontWeight: 'bold',
-                  fontSize: '2rem',
+              <img
+                src="/logo.png"
+                alt="Metro Logo"
+                style={{
+                  width: '120px',
+                  height: 'auto',
+                  maxHeight: '80px',
+                  objectFit: 'contain',
                 }}
-              >
-                M
-              </Typography>
+              />
             </Box>
 
             <Typography 
@@ -171,7 +166,7 @@ const Login = () => {
                 textAlign: 'center',
               }}
             >
-              Metro Management
+              Go-Metro
             </Typography>
             
             <Typography 

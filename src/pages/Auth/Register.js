@@ -63,7 +63,7 @@ const Register = () => {
     full_name: '',
     password: '',
     confirmPassword: '',
-    username: '',
+    // username: '',
   });
   const [errors, setErrors] = useState({});
   const [success, setSuccess] = useState('');
@@ -77,9 +77,9 @@ const Register = () => {
       newErrors.full_name = 'Họ tên là bắt buộc';
     }
 
-    if (!formData.username.trim()) {
-      newErrors.username = 'Tên đăng nhập là bắt buộc';
-    }
+    // if (!formData.username.trim()) {
+    //   newErrors.username = 'Tên đăng nhập là bắt buộc';
+    // }
 
     if (!formData.email.trim()) {
       newErrors.email = 'Email là bắt buộc';
@@ -129,7 +129,7 @@ const Register = () => {
         email: formData.email,
         full_name: formData.full_name,
         password: formData.password,
-        username: formData.username,
+        // username: formData.username,
       };
 
       // Try multiple approaches for CORS issues
@@ -221,30 +221,25 @@ const Register = () => {
               border: '1px solid rgba(255, 255, 255, 0.2)',
             }}
           >
-            {/* Metro Logo/Icon */}
+            {/* Metro Logo */}
             <Box
               sx={{
-                width: 80,
-                height: 80,
-                borderRadius: '50%',
-                background: 'linear-gradient(45deg, #1976d2, #42a5f5)',
+                mb: 3,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                mb: 3,
-                boxShadow: '0 8px 32px rgba(25, 118, 210, 0.3)',
               }}
             >
-              <Typography
-                variant="h3"
-                sx={{
-                  color: 'white',
-                  fontWeight: 'bold',
-                  fontSize: '2rem',
+              <img
+                src="/logo.png"
+                alt="Metro Logo"
+                style={{
+                  width: '120px',
+                  height: 'auto',
+                  maxHeight: '80px',
+                  objectFit: 'contain',
                 }}
-              >
-                M
-              </Typography>
+              />
             </Box>
 
             <Typography 
@@ -257,7 +252,7 @@ const Register = () => {
                 textAlign: 'center',
               }}
             >
-              Metro Management
+              Go-Metro
             </Typography>
             
             <Typography 
@@ -269,7 +264,7 @@ const Register = () => {
                 fontWeight: 500,
               }}
             >
-              Đăng ký tài khoản mới
+              Hệ thống quản lý tàu điện ngầm
             </Typography>
             
             {success && (
@@ -327,7 +322,7 @@ const Register = () => {
                   error={errors.full_name}
                   disabled={loading}
                 />
-                <FormField
+                {/* <FormField
                   id="username"
                   label="Tên đăng nhập"
                   name="username"
@@ -336,7 +331,7 @@ const Register = () => {
                   onChange={handleChange}
                   error={errors.username}
                   disabled={loading}
-                />
+                /> */}
                 <FormField
                   id="password"
                   label="Mật khẩu"

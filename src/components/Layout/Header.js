@@ -41,13 +41,35 @@ const Header = ({ user }) => {
   };
 
   return (
-    <AppBar position="fixed" sx={{ backgroundColor: '#1976d2', zIndex: (theme) => theme.zIndex.drawer + 1 }}>
+    <AppBar 
+      position="fixed" 
+      sx={{ 
+        background: 'linear-gradient(45deg, #1976d2, #42a5f5)',
+        boxShadow: '0 4px 20px rgba(25, 118, 210, 0.3)',
+        zIndex: (theme) => theme.zIndex.drawer + 1 
+      }}
+    >
       <Toolbar>
-        <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-          Metro Management System
+        <Typography 
+          variant="h6" 
+          component="div" 
+          sx={{ 
+            flexGrow: 1,
+            fontWeight: 'bold',
+            textShadow: '0 2px 4px rgba(0,0,0,0.1)'
+          }}
+        >
+          HỆ THỐNG QUẢN LÝ TÀU ĐIỆN NGẦM GO-METRO
         </Typography>
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          <Typography variant="body2" sx={{ mr: 2 }}>
+          <Typography 
+            variant="body2" 
+            sx={{ 
+              mr: 2,
+              fontWeight: 500,
+              textShadow: '0 1px 2px rgba(0,0,0,0.1)'
+            }}
+          >
             {user?.name || 'User'}
           </Typography>
           <IconButton
@@ -57,10 +79,22 @@ const Header = ({ user }) => {
             aria-haspopup="true"
             onClick={handleMenu}
             color="inherit"
+            sx={{
+              transition: 'all 0.3s ease',
+              '&:hover': {
+                transform: 'scale(1.1)',
+                boxShadow: '0 4px 12px rgba(255,255,255,0.2)'
+              }
+            }}
           >
-            <Avatar sx={{ width: 32, height: 32 }}>
+            <Avatar sx={{ 
+              width: 36, 
+              height: 36,
+              border: '2px solid rgba(255,255,255,0.3)',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+            }}>
               {user?.avatar ? (
-                <img src={user.avatar} alt="avatar" />
+                <img src={user.avatar} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
                 <AccountCircle />
               )}
@@ -80,16 +114,44 @@ const Header = ({ user }) => {
             }}
             open={Boolean(anchorEl)}
             onClose={handleClose}
+            sx={{
+              '& .MuiPaper-root': {
+                borderRadius: 2,
+                boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+                border: '1px solid rgba(255,255,255,0.1)'
+              }
+            }}
           >
-            <MenuItem onClick={handleProfile}>
-              <Person sx={{ mr: 1 }} />
+            <MenuItem 
+              onClick={handleProfile}
+              sx={{
+                '&:hover': {
+                  backgroundColor: '#e3f2fd'
+                }
+              }}
+            >
+              <Person sx={{ mr: 1, color: '#1976d2' }} />
               Profile
             </MenuItem>
-            <MenuItem onClick={handleSettings}>
-              <Settings sx={{ mr: 1 }} />
+            <MenuItem 
+              onClick={handleSettings}
+              sx={{
+                '&:hover': {
+                  backgroundColor: '#e3f2fd'
+                }
+              }}
+            >
+              <Settings sx={{ mr: 1, color: '#1976d2' }} />
               Settings
             </MenuItem>
-            <MenuItem onClick={handleLogout}>
+            <MenuItem 
+              onClick={handleLogout}
+              sx={{
+                '&:hover': {
+                  backgroundColor: '#ffebee'
+                }
+              }}
+            >
               Logout
             </MenuItem>
           </Menu>
