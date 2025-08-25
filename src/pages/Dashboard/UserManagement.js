@@ -8,6 +8,8 @@ import {
   TextField,
   Button,
   IconButton,
+  ToggleButton,
+  ToggleButtonGroup,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -18,7 +20,12 @@ import {
   CircularProgress,
   Fab,
   Tooltip,
+  Badge,
+  Divider,
 } from '@mui/material';
+import Pagination from '@mui/material/Pagination';
+import PaginationItem from '@mui/material/PaginationItem';
+import { Search, Clear, FilterAlt } from '@mui/icons-material';
 import { 
   Add, 
   Edit, 
@@ -53,6 +60,17 @@ const UserManagement = () => {
   const [detailLoading, setDetailLoading] = useState(false);
   const [users, setUsers] = useState([]);
   const [fetching, setFetching] = useState(true);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [roleFilter, setRoleFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [nameInput, setNameInput] = useState('');
+  const [debouncedName, setDebouncedName] = useState('');
+  const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+  const [userToDelete, setUserToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Fetch users from API
   const fetchUsers = async () => {
@@ -65,7 +83,12 @@ const UserManagement = () => {
         return;
       }
 
-      const response = await fetch('https://gometro-backend-production.up.railway.app/admin/users', {
+      let url = `https://gometro-backend-production.up.railway.app/admin/users?page=${page}&limit=${limit}`;
+      if (roleFilter) url += `&role=${roleFilter}`;
+      if (debouncedName) url += `&name=${encodeURIComponent(debouncedName)}`;
+      if (statusFilter) url += `&status=${statusFilter}`;
+
+      const response = await fetch(url, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
@@ -76,7 +99,14 @@ const UserManagement = () => {
       const data = await response.json();
 
       if (response.ok && data.success) {
-        setUsers(data.data);
+        const payload = data.data || {};
+        setUsers(Array.isArray(payload.data) ? payload.data : []);
+        if (typeof payload.total === 'number') setTotal(payload.total);
+        if (typeof payload.total_pages === 'number') {
+          setTotalPages(payload.total_pages);
+        } else if (typeof payload.total === 'number') {
+          setTotalPages(Math.max(1, Math.ceil(payload.total / limit)));
+        }
       } else {
         setError(data.error || 'Lỗi khi tải danh sách người dùng');
       }
@@ -90,7 +120,13 @@ const UserManagement = () => {
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+  }, [page, limit, roleFilter, debouncedName, statusFilter]);
+
+  // Debounce name search
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedName(nameInput.trim()), 400);
+    return () => clearTimeout(handle);
+  }, [nameInput]);
 
   const handleChange = (e) => {
     setFormData({
@@ -168,33 +204,38 @@ const UserManagement = () => {
     setOpenDialog(true);
   };
 
-  const handleDelete = async (userId) => {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa người dùng này?')) {
-      return;
-    }
+  const openDelete = (user) => {
+    setUserToDelete(user);
+    setOpenDeleteDialog(true);
+  };
 
+  const closeDelete = () => {
+    if (deleting) return;
+    setOpenDeleteDialog(false);
+    setUserToDelete(null);
+  };
+
+  const confirmDelete = async () => {
+    if (!userToDelete) return;
     try {
-      setLoading(true);
+      setDeleting(true);
       const token = localStorage.getItem('token');
-      
       if (!token) {
         setError('Không tìm thấy token xác thực');
         return;
       }
-
-      const response = await fetch(`https://gometro-backend-production.up.railway.app/admin/users/${userId}`, {
+      const response = await fetch(`https://gometro-backend-production.up.railway.app/admin/users/${userToDelete.id}`, {
         method: 'DELETE',
         headers: {
           'Accept': 'application/json',
           'Authorization': token,
         },
       });
-
       const data = await response.json();
-
       if (response.ok && data.success) {
         setSuccess('Xóa người dùng thành công!');
-        fetchUsers(); // Refresh the list
+        fetchUsers();
+        closeDelete();
       } else {
         setError(data.error || 'Xóa người dùng thất bại');
       }
@@ -202,7 +243,7 @@ const UserManagement = () => {
       setError('Lỗi kết nối server');
       console.error('Error deleting user:', err);
     } finally {
-      setLoading(false);
+      setDeleting(false);
     }
   };
 
@@ -220,9 +261,11 @@ const UserManagement = () => {
 
   const handleViewDetails = async (userId) => {
     try {
+      setOpenDetailDialog(true);
+      setSelectedUser(null);
       setDetailLoading(true);
       setError('');
-      
+
       const token = localStorage.getItem('token');
       if (!token) {
         setError('Không tìm thấy token xác thực');
@@ -241,7 +284,6 @@ const UserManagement = () => {
 
       if (response.ok && data.success) {
         setSelectedUser(data.data);
-        setOpenDetailDialog(true);
       } else {
         setError(data.error || 'Lỗi khi tải thông tin chi tiết người dùng');
       }
@@ -316,6 +358,7 @@ const UserManagement = () => {
   const activeUsers = users.filter(user => user.status === 'active').length;
   const adminUsers = users.filter(user => user.role === 1).length;
   const staffUsers = users.filter(user => user.role === 2).length;
+  const activeFiltersCount = [Boolean(roleFilter), Boolean(statusFilter), Boolean(debouncedName)].filter(Boolean).length;
 
   return (
     <Box sx={{ 
@@ -351,8 +394,21 @@ const UserManagement = () => {
         </Alert>
       )}
 
+      {/* Sticky Header: Statistics Cards + Filters */}
+      <Box sx={{
+        position: 'sticky',
+        top: 'var(--app-header-height, 64px)',
+        zIndex: 12,
+        background: 'linear-gradient(135deg, rgba(245,247,250,0.85) 0%, rgba(195,207,226,0.85) 100%)',
+        backdropFilter: 'blur(10px)',
+        border: '1px solid rgba(102,126,234,0.12)',
+        borderRadius: 3,
+        boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
+        p: 2,
+        mb: 3
+      }}>
       {/* Statistics Cards */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
+      <Grid container spacing={3} sx={{ mb: 1 }}>
         <Grid item xs={12} sm={6} md={3}>
           <Card sx={{
             background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -372,7 +428,7 @@ const UserManagement = () => {
                     Tổng người dùng
                   </Typography>
                   <Typography variant="h3" sx={{ fontWeight: 'bold' }}>
-                    {users.length}
+                    {total}
                   </Typography>
                 </Box>
                 <Tooltip title="Tổng số người dùng trong hệ thống" arrow>
@@ -522,18 +578,223 @@ const UserManagement = () => {
         </Grid>
       </Grid>
 
-      {/* User List */}
-      <Box sx={{ mb: 3 }}>
-        <Typography 
-          variant="h5" 
-          sx={{ 
-            fontWeight: 'bold', 
-            mb: 2,
-            color: '#1976d2'
-          }}
-        >
-          Danh sách người dùng
-        </Typography>
+      {/* Filters + User List */}
+      <Box sx={{ mb: 0 }}>
+        {/* Filters toolbar - WOW glassmorphism */}
+        <Box sx={{
+          background: 'linear-gradient(135deg, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.5) 100%)',
+          borderRadius: 3,
+          p: 2.5,
+          mb: 0,
+          border: '1px solid rgba(102,126,234,0.15)',
+          boxShadow: '0 12px 32px rgba(102,126,234,0.15)',
+          backdropFilter: 'blur(10px)',
+          overflow: 'hidden',
+          '&::before': {
+            content: '""',
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: 0,
+            height: '3px',
+            background: 'linear-gradient(90deg, #667eea, #42a5f5, #9c27b0)',
+            backgroundSize: '200% 100%',
+            animation: 'flow 6s linear infinite'
+          }
+        }}>
+          <style>
+            {`
+              @keyframes flow {
+                0% { background-position: 0% 50%; }
+                50% { background-position: 100% 50%; }
+                100% { background-position: 0% 50%; }
+              }
+            `}
+          </style>
+          <Grid container spacing={2} alignItems="center">
+            <Grid item xs={12} md={12}>
+              <TextField
+                fullWidth
+                placeholder="Tìm kiếm theo tên người dùng"
+                value={nameInput}
+                onChange={(e) => { setNameInput(e.target.value); setPage(1); }}
+                InputProps={{
+                  startAdornment: (
+                    <Box sx={{ display: 'flex', alignItems: 'center', pl: 1 }}>
+                      <Search sx={{ color: '#9e9e9e', mr: 1 }} />
+                    </Box>
+                  ),
+                  endAdornment: (
+                    nameInput ? (
+                      <IconButton size="small" onClick={() => { setNameInput(''); setPage(1); }}>
+                        <Clear sx={{ fontSize: 18, color: '#9e9e9e' }} />
+                      </IconButton>
+                    ) : null
+                  )
+                }}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: 999,
+                    background: 'rgba(255,255,255,0.95)',
+                    height: 56,
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
+                    transition: 'all 0.25s ease',
+                  },
+                  '& .MuiOutlinedInput-input': {
+                    py: 1.5,
+                  },
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: 'rgba(102,126,234,0.25)'
+                  },
+                  '& .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline': {
+                    borderColor: 'rgba(102,126,234,0.45)'
+                  },
+                  '& .MuiOutlinedInput-root.Mui-focused': {
+                    boxShadow: '0 12px 36px rgba(102,126,234,0.22)'
+                  },
+                  '& .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                    borderColor: '#667eea'
+                  }
+                }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6} md={4}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <ToggleButtonGroup
+                  exclusive
+                  size="small"
+                  value={roleFilter || ''}
+                  onChange={(e, val) => { setRoleFilter(val ?? ''); setPage(1); }}
+                  sx={{
+                    background: 'rgba(255,255,255,0.9)',
+                    borderRadius: 2,
+                    p: 0.5,
+                    '& .MuiToggleButton-root': {
+                      border: 'none',
+                      transition: 'all 0.2s ease',
+                    },
+                    '& .MuiToggleButton-root.Mui-selected': {
+                      background: 'linear-gradient(45deg, #e3f2fd, #bbdefb)',
+                      boxShadow: '0 4px 12px rgba(25,118,210,0.2)'
+                    }
+                  }}
+                >
+                  <Tooltip title="Tất cả" arrow>
+                    <ToggleButton value="" sx={{ px: 1.5 }}>
+                      <Group sx={{ fontSize: 18 }} />
+                    </ToggleButton>
+                  </Tooltip>
+                  <Tooltip title="Quản trị viên" arrow>
+                    <ToggleButton value="1" sx={{ px: 1.5 }}>
+                      <AdminPanelSettings sx={{ fontSize: 18, color: '#f44336' }} />
+                    </ToggleButton>
+                  </Tooltip>
+                  <Tooltip title="Nhân viên" arrow>
+                    <ToggleButton value="2" sx={{ px: 1.5 }}>
+                      <Support sx={{ fontSize: 18, color: '#1976d2' }} />
+                    </ToggleButton>
+                  </Tooltip>
+                  <Tooltip title="Người dùng" arrow>
+                    <ToggleButton value="3" sx={{ px: 1.5 }}>
+                      <Person sx={{ fontSize: 18, color: '#ff9800' }} />
+                    </ToggleButton>
+                  </Tooltip>
+                </ToggleButtonGroup>
+              </Box>
+            </Grid>
+            <Grid item xs={12} sm={6} md={4}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <ToggleButtonGroup
+                  exclusive
+                  size="small"
+                  value={statusFilter || ''}
+                  onChange={(e, val) => { setStatusFilter(val ?? ''); setPage(1); }}
+                  sx={{
+                    background: 'rgba(255,255,255,0.9)',
+                    borderRadius: 2,
+                    p: 0.5,
+                    '& .MuiToggleButton-root': {
+                      border: 'none',
+                      transition: 'all 0.2s ease',
+                    },
+                    '& .MuiToggleButton-root.Mui-selected': {
+                      background: 'linear-gradient(45deg, #e8f5e9, #c8e6c9)',
+                      boxShadow: '0 4px 12px rgba(76,175,80,0.2)'
+                    }
+                  }}
+                >
+                  <Tooltip title="Tất cả" arrow>
+                    <ToggleButton value="" sx={{ px: 1.5 }}>
+                      <Typography variant="caption" sx={{ fontWeight: 600 }}>Tất cả</Typography>
+                    </ToggleButton>
+                  </Tooltip>
+                  <Tooltip title="Hoạt động" arrow>
+                    <ToggleButton value="active" sx={{ px: 1.5 }}>
+                      <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: '#4caf50', mr: 1 }} />
+                      <Typography variant="caption" sx={{ fontWeight: 600 }}>Active</Typography>
+                    </ToggleButton>
+                  </Tooltip>
+                  <Tooltip title="Không hoạt động" arrow>
+                    <ToggleButton value="inactive" sx={{ px: 1.5 }}>
+                      <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: '#f44336', mr: 1 }} />
+                      <Typography variant="caption" sx={{ fontWeight: 600 }}>Inactive</Typography>
+                    </ToggleButton>
+                  </Tooltip>
+                </ToggleButtonGroup>
+              </Box>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <Badge color="secondary" badgeContent={activeFiltersCount || 0} overlap="circular">
+                <Button 
+                  fullWidth
+                  variant="contained"
+                  onClick={() => { setRoleFilter(''); setStatusFilter(''); setNameInput(''); setPage(1); }}
+                  startIcon={<FilterAlt />}
+                  sx={{ 
+                    borderRadius: 2, 
+                    textTransform: 'none',
+                    background: activeFiltersCount ? 'linear-gradient(45deg, #1976d2, #42a5f5)' : 'linear-gradient(45deg, #90caf9, #b3e5fc)',
+                    color: activeFiltersCount ? 'white' : '#0d47a1',
+                    boxShadow: '0 6px 20px rgba(25,118,210,0.25)',
+                    '&:hover': { background: 'linear-gradient(45deg, #1565c0, #1976d2)' }
+                  }}
+                >
+                  Xóa lọc
+                </Button>
+              </Badge>
+            </Grid>
+          </Grid>
+          <Divider sx={{ mt: 2, mb: 1, opacity: 0.8 }} />
+          {(roleFilter || statusFilter || debouncedName) && (
+            <Box sx={{ mt: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+              {debouncedName && (
+                <Chip 
+                  label={`Tên: ${debouncedName}`} 
+                  onDelete={() => { setNameInput(''); setPage(1); }}
+                  color="primary"
+                  variant="outlined"
+                />
+              )}
+              {roleFilter && (
+                <Chip 
+                  label={`Vai trò: ${getRoleLabel(parseInt(roleFilter))}`} 
+                  onDelete={() => { setRoleFilter(''); setPage(1); }}
+                  color="secondary"
+                  variant="outlined"
+                />
+              )}
+              {statusFilter && (
+                <Chip 
+                  label={`Trạng thái: ${statusFilter === 'active' ? 'Hoạt động' : 'Không hoạt động'}`} 
+                  onDelete={() => { setStatusFilter(''); setPage(1); }}
+                  color="success"
+                  variant="outlined"
+                />
+              )}
+            </Box>
+          )}
+        </Box>
+      </Box>
       </Box>
 
       {fetching ? (
@@ -670,10 +931,11 @@ const UserManagement = () => {
                         size="medium"
                         onClick={() => handleViewDetails(user.id)} 
                         sx={{ 
-                          bgcolor: '#e3f2fd',
+                          background: 'linear-gradient(45deg, #e3f2fd, #bbdefb)',
+                          boxShadow: '0 4px 12px rgba(25,118,210,0.2)',
                           '&:hover': { 
-                            bgcolor: '#bbdefb',
-                            transform: 'scale(1.1)'
+                            background: 'linear-gradient(45deg, #bbdefb, #90caf9)',
+                            transform: 'translateY(-2px) scale(1.06)'
                           },
                           transition: 'all 0.2s ease'
                         }}
@@ -687,10 +949,11 @@ const UserManagement = () => {
                         size="medium"
                         onClick={() => handleEdit(user)}
                         sx={{ 
-                          bgcolor: '#fff3e0',
+                          background: 'linear-gradient(45deg, #fff3e0, #ffe0b2)',
+                          boxShadow: '0 4px 12px rgba(255,152,0,0.2)',
                           '&:hover': { 
-                            bgcolor: '#ffe0b2',
-                            transform: 'scale(1.1)'
+                            background: 'linear-gradient(45deg, #ffe0b2, #ffcc80)',
+                            transform: 'translateY(-2px) scale(1.06)'
                           },
                           transition: 'all 0.2s ease'
                         }}
@@ -702,12 +965,13 @@ const UserManagement = () => {
                     <Tooltip title="Xóa">
                       <IconButton 
                         size="medium"
-                        onClick={() => handleDelete(user.id)}
+                        onClick={() => openDelete(user)}
                         sx={{ 
-                          bgcolor: '#ffebee',
+                          background: 'linear-gradient(45deg, #ffebee, #ffcdd2)',
+                          boxShadow: '0 4px 12px rgba(244,67,54,0.2)',
                           '&:hover': { 
-                            bgcolor: '#ffcdd2',
-                            transform: 'scale(1.1)'
+                            background: 'linear-gradient(45deg, #ffcdd2, #ef9a9a)',
+                            transform: 'translateY(-2px) scale(1.06)'
                           },
                           transition: 'all 0.2s ease'
                         }}
@@ -745,100 +1009,120 @@ const UserManagement = () => {
       </Fab>
 
       {/* Add/Edit Dialog */}
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="md" fullWidth>
+      <Dialog 
+        open={openDialog} 
+        onClose={handleCloseDialog} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 4,
+            background: 'linear-gradient(135deg, rgba(255,255,255,0.94) 0%, rgba(255,255,255,0.88) 100%)',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+            overflow: 'hidden',
+            backdropFilter: 'blur(12px)'
+          }
+        }}
+      >
         <DialogTitle sx={{ 
-          background: 'linear-gradient(45deg, #1976d2, #42a5f5)',
+          background: 'linear-gradient(45deg, #667eea, #42a5f5)',
           color: 'white',
-          borderRadius: '8px 8px 0 0'
+          borderBottom: '1px solid rgba(255,255,255,0.25)',
+          p: 3
         }}>
           {editingUser ? 'Chỉnh sửa người dùng' : 'Thêm người dùng mới'}
         </DialogTitle>
-                 <DialogContent sx={{ mt: 2 }}>
-           <Box component="form" onSubmit={handleSubmit}>
-             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-               <TextField
-                 fullWidth
-                 label="Tên"
-                 name="name"
-                 value={formData.name}
-                 onChange={handleChange}
-                 required
-                 disabled={loading}
-                 sx={{
-                   '& .MuiOutlinedInput-root': {
-                     borderRadius: 2,
-                   }
-                 }}
-               />
-               <TextField
-                 fullWidth
-                 label="Email"
-                 name="email"
-                 type="email"
-                 value={formData.email}
-                 onChange={handleChange}
-                 required
-                 disabled={loading}
-                 sx={{
-                   '& .MuiOutlinedInput-root': {
-                     borderRadius: 2,
-                   }
-                 }}
-               />
-               <TextField
-                 fullWidth
-                 label="Số điện thoại"
-                 name="phone"
-                 value={formData.phone}
-                 onChange={handleChange}
-                 disabled={loading}
-                 sx={{
-                   '& .MuiOutlinedInput-root': {
-                     borderRadius: 2,
-                   }
-                 }}
-               />
-               <TextField
-                 fullWidth
-                 select
-                 label="Vai trò"
-                 name="role"
-                 value={formData.role}
-                 onChange={handleChange}
-                 required
-                 disabled={loading}
-                 sx={{
-                   '& .MuiOutlinedInput-root': {
-                     borderRadius: 2,
-                   }
-                 }}
-               >
-                 <option value={1}>Quản trị viên</option>
-                 <option value={2}>Nhân viên</option>
-                 <option value={3}>Người dùng</option>
-               </TextField>
-               <TextField
-                 fullWidth
-                 select
-                 label="Trạng thái"
-                 name="status"
-                 value={formData.status}
-                 onChange={handleChange}
-                 required
-                 disabled={loading}
-                 sx={{
-                   '& .MuiOutlinedInput-root': {
-                     borderRadius: 2,
-                   }
-                 }}
-               >
-                 <option value="active">Hoạt động</option>
-                 <option value="inactive">Không hoạt động</option>
-               </TextField>
-             </Box>
-           </Box>
-         </DialogContent>
-        <DialogActions sx={{ p: 3 }}>
+        <DialogContent sx={{ mt: 2 }}>
+          <Box component="form" onSubmit={handleSubmit}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <TextField
+                fullWidth
+                label="Tên"
+                name="name"
+                value={formData.name}
+                onChange={handleChange}
+                required
+                disabled={loading}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: 2,
+                    background: 'rgba(255,255,255,0.95)'
+                  }
+                }}
+              />
+              <TextField
+                fullWidth
+                label="Email"
+                name="email"
+                type="email"
+                value={formData.email}
+                onChange={handleChange}
+                required
+                disabled={loading}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: 2,
+                    background: 'rgba(255,255,255,0.95)'
+                  }
+                }}
+              />
+              <TextField
+                fullWidth
+                label="Số điện thoại"
+                name="phone"
+                value={formData.phone}
+                onChange={handleChange}
+                disabled={loading}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: 2,
+                    background: 'rgba(255,255,255,0.95)'
+                  }
+                }}
+              />
+              <TextField
+                fullWidth
+                select
+                label="Vai trò"
+                name="role"
+                value={formData.role}
+                onChange={handleChange}
+                required
+                disabled={loading}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: 2,
+                    background: 'rgba(255,255,255,0.95)'
+                  }
+                }}
+              >
+                <option value={1}>Quản trị viên</option>
+                <option value={2}>Nhân viên</option>
+                <option value={3}>Người dùng</option>
+              </TextField>
+              <TextField
+                fullWidth
+                select
+                label="Trạng thái"
+                name="status"
+                value={formData.status}
+                onChange={handleChange}
+                required
+                disabled={loading}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: 2,
+                    background: 'rgba(255,255,255,0.95)'
+                  }
+                }}
+              >
+                <option value="active">Hoạt động</option>
+                <option value="inactive">Không hoạt động</option>
+              </TextField>
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ p: 3, borderTop: '1px solid rgba(0,0,0,0.06)' }}>
           <Button 
             onClick={handleCloseDialog} 
             disabled={loading}
@@ -854,9 +1138,9 @@ const UserManagement = () => {
             startIcon={loading ? <CircularProgress size={20} /> : null}
             sx={{ 
               borderRadius: 2,
-              background: 'linear-gradient(45deg, #1976d2, #42a5f5)',
+              background: 'linear-gradient(45deg, #667eea, #42a5f5)',
               '&:hover': {
-                background: 'linear-gradient(45deg, #1565c0, #1976d2)',
+                background: 'linear-gradient(45deg, #5a6fd8, #1976d2)',
               }
             }}
           >
@@ -865,19 +1149,133 @@ const UserManagement = () => {
         </DialogActions>
       </Dialog>
 
+      {/* Delete Confirmation Dialog - glassy */}
+      <Dialog 
+        open={openDeleteDialog}
+        onClose={closeDelete}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 4,
+            background: 'linear-gradient(135deg, rgba(255,255,255,0.94) 0%, rgba(255,255,255,0.88) 100%)',
+            boxShadow: '0 20px 60px rgba(244,67,54,0.25)',
+            overflow: 'hidden',
+            backdropFilter: 'blur(12px)'
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          background: 'linear-gradient(45deg, #ef5350, #e53935)',
+          color: 'white',
+          borderBottom: '1px solid rgba(255,255,255,0.25)',
+          p: 3
+        }}>
+          Xác nhận xóa
+        </DialogTitle>
+        <DialogContent sx={{ p: 3 }}>
+          <Typography sx={{ mb: 1 }}>
+            Bạn có chắc muốn xóa người dùng này?
+          </Typography>
+          {userToDelete && (
+            <Box sx={{ mt: 1, p: 2, borderRadius: 2, background: 'rgba(239, 83, 80, 0.06)', border: '1px solid rgba(239,83,80,0.2)' }}>
+              <Typography sx={{ fontWeight: 600 }}>{userToDelete.full_name}</Typography>
+              <Typography variant="body2" color="text.secondary">{userToDelete.email}</Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 3, borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+          <Button onClick={closeDelete} disabled={deleting} variant="outlined" sx={{ borderRadius: 2 }}>Hủy</Button>
+          <Button onClick={confirmDelete} disabled={deleting} variant="contained" sx={{ borderRadius: 2, background: 'linear-gradient(45deg, #ef5350, #e53935)' }}>
+            {deleting ? 'Đang xóa...' : 'Xóa'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      {/* Bottom Pagination + Page size - WOW styling */}
+      <Box sx={{
+        position: 'sticky',
+        bottom: 0,
+        zIndex: 9,
+        mt: 4,
+        background: 'linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0.6) 100%)',
+        border: '1px solid rgba(102,126,234,0.15)',
+        boxShadow: '0 -12px 32px rgba(0,0,0,0.08)',
+        backdropFilter: 'blur(10px)',
+        borderRadius: 3,
+        p: 2,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between'
+      }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography sx={{ fontWeight: 600, color: '#1976d2' }}>Trang</Typography>
+          <Pagination 
+            count={totalPages || 1} 
+            page={page} 
+            onChange={(e, value) => setPage(value)}
+            siblingCount={1}
+            boundaryCount={1}
+            showFirstButton
+            showLastButton
+            renderItem={(item) => (
+              <PaginationItem
+                {...item}
+                sx={{
+                  borderRadius: 999,
+                  mx: 0.25,
+                  minWidth: 36,
+                  height: 36,
+                  fontWeight: 600,
+                  transition: 'all 0.2s ease',
+                  '&.Mui-selected': {
+                    background: 'linear-gradient(45deg, #667eea, #42a5f5)',
+                    color: 'white',
+                    boxShadow: '0 6px 20px rgba(102,126,234,0.35)'
+                  }
+                }}
+              />
+            )}
+          />
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography sx={{ color: 'text.secondary' }}>Số bản ghi/trang</Typography>
+          <TextField
+            select
+            value={limit}
+            onChange={(e) => { setLimit(parseInt(e.target.value)); setPage(1); }}
+            SelectProps={{ native: true }}
+            sx={{
+              width: 140,
+              '& .MuiOutlinedInput-root': {
+                borderRadius: 999,
+                background: 'rgba(255,255,255,0.95)'
+              }
+            }}
+          >
+            <option value={10}>10</option>
+            <option value={20}>20</option>
+            <option value={50}>50</option>
+          </TextField>
+        </Box>
+      </Box>
+
       {/* User Detail Dialog - WOW Version */}
       <Dialog 
         open={openDetailDialog} 
         onClose={handleCloseDetailDialog} 
         maxWidth="md" 
         fullWidth
+        scroll="paper"
+        slotProps={{ backdrop: { sx: { backdropFilter: 'blur(6px)' } } }}
         PaperProps={{
           sx: {
+            zIndex: 1500,
             borderRadius: 4,
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+            background: 'linear-gradient(135deg, rgba(255,255,255,0.94) 0%, rgba(255,255,255,0.88) 100%)',
+            boxShadow: '0 24px 64px rgba(0,0,0,0.28)',
             overflow: 'hidden',
             position: 'relative',
+            backdropFilter: 'blur(12px)',
             '&::before': {
               content: '""',
               position: 'absolute',
@@ -885,8 +1283,9 @@ const UserManagement = () => {
               left: 0,
               right: 0,
               height: '4px',
-              background: 'linear-gradient(90deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4, #ffeaa7, #dda0dd, #98d8c8)',
-              animation: 'rainbow 3s ease-in-out infinite'
+              background: 'linear-gradient(90deg, #667eea, #42a5f5, #9c27b0)',
+              backgroundSize: '200% 100%',
+              animation: 'flow 6s linear infinite'
             }
           }
         }}
@@ -909,20 +1308,24 @@ const UserManagement = () => {
               from { opacity: 0; transform: translateY(20px); }
               to { opacity: 1; transform: translateY(0); }
             }
+            @keyframes flow {
+              0% { background-position: 0% 50%; }
+              50% { background-position: 100% 50%; }
+              100% { background-position: 0% 50%; }
+            }
           `}
         </style>
         
         <DialogTitle sx={{ 
-          background: 'rgba(255,255,255,0.1)',
-          backdropFilter: 'blur(10px)',
+          background: 'linear-gradient(45deg, #667eea, #42a5f5)',
           color: 'white',
-          borderBottom: '1px solid rgba(255,255,255,0.2)',
+          borderBottom: '1px solid rgba(255,255,255,0.25)',
           p: 3
         }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <Box sx={{ display: 'flex', alignItems: 'center' }}>
               <Box sx={{
-                background: 'rgba(255,255,255,0.2)',
+                background: 'rgba(255,255,255,0.25)',
                 borderRadius: '50%',
                 p: 1,
                 mr: 2,
@@ -932,11 +1335,7 @@ const UserManagement = () => {
               </Box>
               <Typography variant="h5" sx={{ 
                 fontWeight: 'bold',
-                background: 'linear-gradient(45deg, #fff, #f0f0f0)',
-                backgroundClip: 'text',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                textShadow: '0 2px 4px rgba(0,0,0,0.3)'
+                color: 'white'
               }}>
                 Chi tiết người dùng
               </Typography>
@@ -945,14 +1344,14 @@ const UserManagement = () => {
               width: 40,
               height: 40,
               borderRadius: '50%',
-              background: 'rgba(255,255,255,0.2)',
+              background: 'rgba(255,255,255,0.25)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
               transition: 'all 0.3s ease',
               '&:hover': {
-                background: 'rgba(255,255,255,0.3)',
+                background: 'rgba(255,255,255,0.35)',
                 transform: 'rotate(180deg)'
               }
             }} onClick={handleCloseDetailDialog}>
@@ -961,11 +1360,7 @@ const UserManagement = () => {
           </Box>
         </DialogTitle>
         
-        <DialogContent sx={{ 
-          background: 'rgba(255,255,255,0.95)',
-          backdropFilter: 'blur(10px)',
-          p: 0
-        }}>
+        <DialogContent dividers sx={{ p: 0 }}>
           {detailLoading ? (
             <Box sx={{ 
               display: 'flex', 
@@ -1390,16 +1785,16 @@ const UserManagement = () => {
         
         <DialogActions sx={{ 
           p: 3, 
-          background: 'rgba(255,255,255,0.1)',
-          backdropFilter: 'blur(10px)',
-          borderTop: '1px solid rgba(255,255,255,0.2)'
+          background: 'rgba(255,255,255,0.6)',
+          backdropFilter: 'blur(8px)',
+          borderTop: '1px solid rgba(0,0,0,0.06)'
         }}>
           <Button 
             onClick={handleCloseDetailDialog}
             variant="contained"
             sx={{ 
               borderRadius: 3,
-              background: 'linear-gradient(45deg, #667eea, #764ba2)',
+              background: 'linear-gradient(45deg, #667eea, #42a5f5)',
               color: 'white',
               px: 4,
               py: 1.5,
@@ -1409,7 +1804,7 @@ const UserManagement = () => {
               boxShadow: '0 8px 24px rgba(102, 126, 234, 0.3)',
               transition: 'all 0.3s ease',
               '&:hover': {
-                background: 'linear-gradient(45deg, #5a6fd8, #6a5acd)',
+                background: 'linear-gradient(45deg, #5a6fd8, #1976d2)',
                 transform: 'translateY(-2px)',
                 boxShadow: '0 12px 32px rgba(102, 126, 234, 0.4)'
               }
